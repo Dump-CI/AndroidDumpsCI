@@ -27,6 +27,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/sushrut1101/docker:arch
+      options: --privileged
 
     steps:
        - name: Checkouts
@@ -39,9 +42,7 @@ jobs:
        - name: Setup DumprX's Environment
          working-directory: DumprX
          run: |
-
-              sudo bash setup.sh
-              sudo apt install -y f2fs-tools
+              ./setup.sh
               mkdir -p ~/.ssh
               ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
               ssh-keyscan -t rsa gitlab.com >> ~/.ssh/known_hosts
