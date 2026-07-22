@@ -7,25 +7,49 @@ on:
         description: "Direct Link of the ROM/Firmware to Dump"
         required: true
       EXTRA_CMD:
-        description: "Any Extra Command to Run Before Dump"
+        description: "Extra command to run before dumping"
         required: false
-
-defaults:
-  run:
-    shell: bash
+        default: ""
 
 env:
   ROM_URL: ${{ github.event.inputs.ROM_URL }}
-  PUSH_TO_GITLAB: true
   EXTRA_CMD: ${{ github.event.inputs.EXTRA_CMD }}
+  PUSH_TO_GITLAB: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  dump:
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            git-lfs \
+            curl \
+            wget \
+            unzip \
+            zip \
+            jq \
+            p7zip-full \
+            python3 \
+            python3-pip \
+            aria2 \
+            xz-utils \
+            lz4 \
+            zstd \
+            brotli \
+            ca-certificates \
+            openssh-client
+
+          python3 -m pip install --upgrade pip
+          python3 -m pip install uv
+
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Clone DumprX
         run: |
@@ -38,60 +62,42 @@ jobs:
 
       - name: Configure SSH
         run: |
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
 
-          printf '%s\n' "${{ secrets.PRIV_SSH_KEY }}" > "$HOME/.ssh/id_ed25519"
-          chmod 600 "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "${{ secrets.PRIV_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
 
-          ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
-          ssh-keyscan gitlab.com >> "$HOME/.ssh/known_hosts"
-          chmod 644 "$HOME/.ssh/known_hosts"
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-          cat > "$HOME/.ssh/config" <<EOF
+          cat > ~/.ssh/config <<EOF
           Host github.com
-            User git
-            IdentityFile $HOME/.ssh/id_ed25519
+            IdentityFile ~/.ssh/id_ed25519
             IdentitiesOnly yes
 
           Host gitlab.com
-            User git
-            IdentityFile $HOME/.ssh/id_ed25519
+            IdentityFile ~/.ssh/id_ed25519
             IdentitiesOnly yes
           EOF
 
-          chmod 600 "$HOME/.ssh/config"
-
-          echo "=== HOME ==="
-          echo "$HOME"
-
-          echo "=== SSH Directory ==="
-          ls -lah "$HOME/.ssh"
-
-          echo "=== Key Size ==="
-          wc -c "$HOME/.ssh/id_ed25519"
-
-          echo "=== Known Hosts ==="
-          cat "$HOME/.ssh/known_hosts"
-
-          echo "=== Testing GitLab SSH ==="
-          ssh -vvv -T git@gitlab.com || true
-
-      - name: Setup DumprX Config
+      - name: Configure DumprX
         working-directory: DumprX
         run: |
-          sudo bash setup.sh
           echo "${{ secrets.GITLAB_TOKEN }}" > .gitlab_token
           echo "${{ secrets.GITLAB_GROUP }}" > .gitlab_group
           echo "${{ secrets.BOT_TOKEN }}" > .tg_token
           echo "${{ secrets.CHAT_ID }}" > .tg_chat
 
       - name: Run Extra Command
+        if: ${{ env.EXTRA_CMD != '' }}
         working-directory: DumprX
         run: |
-          $EXTRA_CMD
+          eval "$EXTRA_CMD"
 
       - name: Start Dumping
         working-directory: DumprX
         run: |
+          chmod +x dumper.sh
           ./dumper.sh "$ROM_URL"
