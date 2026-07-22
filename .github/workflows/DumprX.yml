@@ -50,6 +50,12 @@ jobs:
               git config --global user.name "atharvnegi"
               git config --global user.email "atharvnegi2951@gmail.com"
 
+       - name: Debug SSH
+         run: |
+               ls -la ~/.ssh
+               ssh-add -l || true
+               ssh -vvv -T git@gitlab.com || true
+
        - name: Setup Config envs
          working-directory: DumprX
          run: |
