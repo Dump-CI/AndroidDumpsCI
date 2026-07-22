@@ -1,5 +1,5 @@
 name: DumprX
- 
+
 on:
   workflow_dispatch:
     inputs:
@@ -15,66 +15,86 @@ defaults:
     shell: bash
 
 env:
-  # ROM
   ROM_URL: ${{ github.event.inputs.ROM_URL }}
-
-  # Gitlab
   PUSH_TO_GITLAB: true
-
-  # Extra Command
   EXTRA_CMD: ${{ github.event.inputs.EXTRA_CMD }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     container:
       image: ghcr.io/sushrut1101/docker:arch
       options: --privileged
 
     steps:
-       - name: Checkouts
-         uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-       - name: Clone Our Firmware Dumper
-         run: |
-              git clone https://github.com/DumprX/DumprX.git DumprX
+      - name: Clone DumprX
+        run: |
+          git clone https://github.com/DumprX/DumprX.git
 
-       - name: Setup DumprX's Environment
-         working-directory: DumprX
-         run: |
-              mkdir -p ~/.ssh
-              chmod 700 ~/.ssh
-              ssh-keyscan github.com >> ~/.ssh/known_hosts
-              ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
-              chmod 644 ~/.ssh/known_hosts
-              git config --global user.name "atharvnegi"
-              git config --global user.email "atharvnegi2951@gmail.com"
+      - name: Configure Git
+        run: |
+          git config --global user.name "atharvnegi"
+          git config --global user.email "atharvnegi2951@gmail.com"
 
-       - name: Debug SSH
-         run: |
-               ls -la ~/.ssh
-               ssh-add -l || true
-               ssh -vvv -T git@gitlab.com || true
+      - name: Configure SSH
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
 
-       - name: Setup Config envs
-         working-directory: DumprX
-         run: |
-              # echo "${{ secrets.GIT_TOKEN }}" > .github_token
-              # echo "${{ secrets.GIT_ORG_NAME }}" > .github_orgname
-              echo "${{ secrets.GITLAB_TOKEN }}" > .gitlab_token  # Only for Gitlab
-              echo "${{ secrets.GITLAB_GROUP }}" > .gitlab_group  # Only for Gitlab
-              echo "${{ secrets.PRIV_SSH_KEY }}" > ~/.ssh/id_ed25519  # Only for Gitlab
-              echo "${{ secrets.BOT_TOKEN }}" > .tg_token
-              echo "${{ secrets.CHAT_ID }}" > .tg_chat
-              chmod 600 ~/.ssh/id_ed25519
-              ssh -T git@gitlab.com
+          printf '%s\n' "${{ secrets.PRIV_SSH_KEY }}" > "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/id_ed25519"
 
-       - name: Run the Extra Command
-         working-directory: DumprX
-         run: |
-              $EXTRA_CMD
+          ssh-keyscan github.com >> "$HOME/.ssh/known_hosts"
+          ssh-keyscan gitlab.com >> "$HOME/.ssh/known_hosts"
+          chmod 644 "$HOME/.ssh/known_hosts"
 
-       - name: Start Dumping
-         working-directory: DumprX
-         run: |
-              ./dumper.sh "$ROM_URL"
+          cat > "$HOME/.ssh/config" <<EOF
+          Host github.com
+            User git
+            IdentityFile $HOME/.ssh/id_ed25519
+            IdentitiesOnly yes
+
+          Host gitlab.com
+            User git
+            IdentityFile $HOME/.ssh/id_ed25519
+            IdentitiesOnly yes
+          EOF
+
+          chmod 600 "$HOME/.ssh/config"
+
+          echo "=== HOME ==="
+          echo "$HOME"
+
+          echo "=== SSH Directory ==="
+          ls -lah "$HOME/.ssh"
+
+          echo "=== Key Size ==="
+          wc -c "$HOME/.ssh/id_ed25519"
+
+          echo "=== Known Hosts ==="
+          cat "$HOME/.ssh/known_hosts"
+
+          echo "=== Testing GitLab SSH ==="
+          ssh -vvv -T git@gitlab.com || true
+
+      - name: Setup DumprX Config
+        working-directory: DumprX
+        run: |
+          echo "${{ secrets.GITLAB_TOKEN }}" > .gitlab_token
+          echo "${{ secrets.GITLAB_GROUP }}" > .gitlab_group
+          echo "${{ secrets.BOT_TOKEN }}" > .tg_token
+          echo "${{ secrets.CHAT_ID }}" > .tg_chat
+
+      - name: Run Extra Command
+        working-directory: DumprX
+        run: |
+          $EXTRA_CMD
+
+      - name: Start Dumping
+        working-directory: DumprX
+        run: |
+          ./dumper.sh "$ROM_URL"
